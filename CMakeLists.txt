@@ -7,11 +7,11 @@ project(WebFramework VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-  set(CMAKE_CXX_FLAGS "-fcolor-diagnostics ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "-Wall -fcolor-diagnostics ${CMAKE_CXX_FLAGS}")
 endif()
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
-  set(CMAKE_CXX_FLAGS "-fdiagnostics-color=always ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "-lstdc++ -lm -Wall -fdiagnostics-color=always ${CMAKE_CXX_FLAGS}")
 endif()
 
 include(FetchContent)
@@ -24,12 +24,12 @@ macro(AddExternal target url git_tag)
   FetchContent_MakeAvailable(${target})
 endmacro()
 
-file(GLOB SOURCES 
+file(GLOB WebFramework_SOURCES 
     "lib/*.cpp"
 )
 
 add_library(WebFramework STATIC)
-target_sources(WebFramework PRIVATE ${SOURCES})
+target_sources(WebFramework PRIVATE ${WebFramework_SOURCES})
 target_include_directories(WebFramework
     PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include
 )
@@ -40,7 +40,14 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
   set(CMAKE_CXX_FLAGS "-fsanitize=address ${CMAKE_CXX_FLAGS}") 
   target_compile_definitions(WebFramework PRIVATE DEBUG)
 endif()
-
 add_subdirectory(submodule)
-add_subdirectory(tests)
-add_subdirectory(examples)
+
+option(WebFramework_BUILD_TESTS "Build tests" ON)
+option(WebFramework_BUILD_EXAMPLES "Build examples" ON)
+
+if(${WebFramework_BUILD_TESTS})
+  add_subdirectory(tests)
+endif()
+if(${WebFramework_BUILD_EXAMPLES})
+  add_subdirectory(examples)
+endif()

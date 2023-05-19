@@ -1,2 +1,2 @@
-add_executable(main main.cpp)
-target_link_libraries(main AsyncIO)
+add_executable(example_server example_server.cpp)
+target_link_libraries(example_server WebFramework)

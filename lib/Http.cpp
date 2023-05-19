@@ -1,6 +1,6 @@
 #include "WebFramework/Http.hpp"
 #include <cassert>
-
+#include <format>
 namespace wf {
 auto static ParseHttpMethod(std::string_view method) -> HttpMethod
 {
@@ -27,7 +27,7 @@ auto static ParseHttpMethod(std::string_view method) -> HttpMethod
   }
 }
 
-auto static ToString(HttpMethod method) -> std::string_view
+auto ToString(HttpMethod method) -> std::string_view
 {
   switch (method) {
   case HttpMethod::Get:
@@ -53,7 +53,7 @@ auto static ToString(HttpMethod method) -> std::string_view
   }
 }
 
-auto static ToString(HttpVersion version) -> std::string_view
+auto ToString(HttpVersion version) -> std::string_view
 {
   switch (version) {
   case HttpVersion::Http10:
@@ -67,7 +67,7 @@ auto static ToString(HttpVersion version) -> std::string_view
   }
 }
 
-auto static ToString(HttpStatus status) -> std::string_view
+auto ToString(HttpStatus status) -> std::string_view
 {
   // clang-format off
   switch (status) {
@@ -137,5 +137,151 @@ auto static ToString(HttpStatus status) -> std::string_view
   default: assert(0);
   }
   // clang-format on
+}
+
+auto RecvHttpRequest(async::TcpStream& stream, std::span<char> buffer) -> Task<StdResult<std::unique_ptr<HttpRequest>>>
+{
+  char const *method, *path;
+  int pret, minorVersion;
+  struct phr_header headers[100];
+  size_t bufLen = 0, prevBufLen = 0, methodLen, pathLen, headerNums = std::size(headers);
+  while (true) {
+    auto recvNum =
+        co_await stream.recv(std::as_writable_bytes(std::span<char>(buffer.data() + bufLen, buffer.size() - bufLen)));
+    if (!recvNum) {
+      co_return make_unexpected(recvNum.error());
+    }
+    if (recvNum.value() == 0) {
+      co_return make_unexpected(std::make_error_code(std::errc::io_error));
+    }
+
+    auto const len = recvNum.value();
+    prevBufLen = bufLen;
+    bufLen += len;
+    pret = phr_parse_request(buffer.data(), bufLen, &method, &methodLen, &path, &pathLen, &minorVersion, headers,
+                             &headerNums, prevBufLen);
+    if (pret > 0) {
+      break;
+    } else if (pret == -1) {
+      co_return make_unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+    assert(pret == -2);
+    if (bufLen == buffer.size()) {
+      co_return make_unexpected(std::make_error_code(std::errc::no_buffer_space));
+    }
+  }
+  auto req = std::make_unique<HttpRequest>();
+  req->method = ParseHttpMethod(std::string_view(method, methodLen));
+  req->path = std::string_view(path, pathLen);
+  req->version = minorVersion == 0 ? HttpVersion::Http10 : HttpVersion::Http11;
+  for (size_t i = 0; i < headerNums; ++i) {
+    req->headers.emplace(std::string_view(headers[i].name, headers[i].name_len),
+                         std::string_view(headers[i].value, headers[i].value_len));
+  }
+  req->body = std::string(buffer.data() + pret, bufLen - pret);
+  co_return req;
+}
+auto RecvHttpResponse(async::TcpStream& stream, std::span<char> buf) -> Task<StdResult<std::unique_ptr<HttpResponse>>>
+{
+  int pret, minorVersion, status;
+  struct phr_header headers[100];
+  size_t bufLen = 0, prevBufLen = 0, headerNums = std::size(headers);
+  char const* msgs;
+  size_t msgLen;
+
+  while (true) {
+    auto recvNum =
+        co_await stream.recv(std::as_writable_bytes(std::span<char>(buf.data() + bufLen, buf.size() - bufLen)));
+    if (!recvNum) {
+      co_return make_unexpected(recvNum.error());
+    }
+    auto const len = recvNum.value();
+    prevBufLen = bufLen;
+    bufLen += len;
+    pret = phr_parse_response(buf.data(), bufLen, &minorVersion, &status, &msgs, &msgLen, headers, &headerNums,
+                              prevBufLen);
+    if (pret > 0) {
+      break;
+    } else if (pret == -1) {
+      co_return make_unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+    assert(pret == -2);
+    if (bufLen == buf.size()) {
+      co_return make_unexpected(std::make_error_code(std::errc::message_size));
+    }
+  }
+  auto res = std::make_unique<HttpResponse>();
+  res->version = minorVersion == 0 ? HttpVersion::Http10 : HttpVersion::Http11;
+  res->status = static_cast<HttpStatus>(status);
+  res->reason = std::string_view(msgs, msgLen);
+  for (size_t i = 0; i < headerNums; ++i) {
+    res->headers.emplace(std::string_view(headers[i].name, headers[i].name_len),
+                         std::string_view(headers[i].value, headers[i].value_len));
+  }
+  res->body = std::string(buf.data() + pret, bufLen - pret);
+  co_return res;
+}
+
+auto RecvHttpRequest(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpRequest>>>
+{
+  auto buf = std::array<char, 4096>();
+  co_return co_await RecvHttpRequest(stream, buf);
+}
+auto RecvHttpResponse(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpResponse>>>
+{
+  auto buf = std::array<char, 4096>();
+  co_return co_await RecvHttpResponse(stream, buf);
+}
+
+auto SendHttpRequest(async::TcpStream& stream, HttpRequest const& req) -> Task<StdResult<void>>
+{
+  auto const buf = ToString(req);
+  auto sent = size_t(0);
+  while (sent < buf.size()) {
+    auto const sendNum = co_await stream.send(std::as_bytes(std::span(buf.data() + sent, buf.size() - sent)));
+    if (!sendNum) {
+      co_return make_unexpected(sendNum.error());
+    }
+    sent += sendNum.value();
+  }
+  co_return {};
+}
+auto SendHttpResponse(async::TcpStream& stream, HttpResponse const& res) -> Task<StdResult<void>>
+{
+  auto const buf = ToString(res);
+  auto sent = size_t(0);
+  while (sent < buf.size()) {
+    auto const sendNum = co_await stream.send(std::as_bytes(std::span(buf.data() + sent, buf.size() - sent)));
+    if (!sendNum) {
+      co_return make_unexpected(sendNum.error());
+    }
+    sent += sendNum.value();
+  }
+  co_return {};
+}
+auto ToString(HttpRequest const& req) -> std::string
+{
+  auto ret = std::string();
+
+  ret += std::format("{} {} {}\r\n", ToString(req.method), req.path, ToString(req.version));
+  for (auto const& [name, value] : req.headers) {
+    ret += std::format("{}: {}\r\n", name, value);
+  }
+  ret += "\r\n";
+  ret += req.body;
+  return ret;
+}
+auto ToString(HttpResponse const& res) -> std::string
+{
+  using StatusCodeUnderlyingType = std::underlying_type_t<HttpStatus>;
+  auto ret = std::string();
+  ret +=
+      std::format("{} {} {}\r\n", ToString(res.version), static_cast<StatusCodeUnderlyingType>(res.status), res.reason);
+  for (auto const& [name, value] : res.headers) {
+    ret += std::format("{}: {}\r\n", name, value);
+  }
+  ret += "\r\n";
+  ret += res.body;
+  return ret;
 }
 } // namespace wf

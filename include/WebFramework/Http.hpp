@@ -1,6 +1,9 @@
 #pragma once
+#include <Async/TcpStream.hpp>
 #include <string>
 #include <unordered_map>
+
+#include "picohttpparser.h"
 
 namespace wf {
 enum class HttpMethod {
@@ -15,6 +18,7 @@ enum class HttpMethod {
   Patch,
   Unknown,
 };
+auto ToString(HttpMethod method) -> std::string_view;
 
 enum class HttpVersion {
   Http10,
@@ -22,6 +26,7 @@ enum class HttpVersion {
   Http2,
   Unknown,
 };
+auto ToString(HttpVersion version) -> std::string_view;
 
 enum class HttpStatus {
   Continue = 100,
@@ -88,7 +93,7 @@ enum class HttpStatus {
   NotExtended = 510,
   NetworkAuthenticationRequired = 511,
 };
-
+auto ToString(HttpStatus status) -> std::string_view;
 // HTTP Request
 struct HttpRequest {
   HttpMethod method;
@@ -97,6 +102,7 @@ struct HttpRequest {
   std::unordered_map<std::string, std::string> headers;
   std::string body;
 };
+auto ToString(HttpRequest const& req) -> std::string;
 
 // HTTP Response
 struct HttpResponse {
@@ -106,4 +112,16 @@ struct HttpResponse {
   std::unordered_map<std::string, std::string> headers;
   std::string body;
 };
+auto ToString(HttpResponse const& res) -> std::string;
+
+auto RecvHttpRequest(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpRequest>>>;
+auto RecvHttpResponse(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpResponse>>>;
+
+auto RecvHttpResponse(async::TcpStream& stream, std::span<char> buffer)
+    -> Task<StdResult<std::unique_ptr<HttpResponse>>>;
+auto RecvHttpRequest(async::TcpStream& stream, std::span<char> buffer) -> Task<StdResult<std::unique_ptr<HttpRequest>>>;
+
+auto SendHttpRequest(async::TcpStream& stream, HttpRequest const& req) -> Task<StdResult<void>>;
+auto SendHttpResponse(async::TcpStream& stream, HttpResponse const& res) -> Task<StdResult<void>>;
+
 } // namespace wf
