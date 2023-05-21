@@ -6,8 +6,8 @@ namespace wf {
 class Context {
 public:
   friend class Server;
-  Context(async::Reactor& r, async::MultiThreadExecutor& e, async::TcpStream& s, std::unique_ptr<ParamsType> p,
-          QueriesType&& queries);
+  Context(async::Reactor& r, async::MultiThreadExecutor& e, async::TcpStream& s, ParamsType& p,
+          QueriesType& queries);
   auto json(json11::Json const& json) -> bool;
   auto html(std::string_view html) -> bool;
   auto text(std::string_view text) -> bool;
@@ -17,8 +17,8 @@ public:
   auto stream() -> async::TcpStream& { return mStream; }
   auto getParam(std::string const& key) -> std::optional<std::string_view>
   {
-    auto it = mParams->find(key);
-    if (it == mParams->end()) {
+    auto it = mParams.find(key);
+    if (it == mParams.end()) {
       return std::nullopt;
     }
     return it->second;
@@ -37,14 +37,13 @@ public:
   auto runMiddleware() -> Task<bool>;
   auto runAllMiddleware() -> Task<bool>;
 
-  QueriesType mQueries;
-  std::unique_ptr<ParamsType> mParams;
+  QueriesType& mQueries;
+  ParamsType& mParams;
 private:
   async::Reactor& mReactor;
   async::MultiThreadExecutor& mExecutor;
   async::TcpStream& mStream;
   HttpResponse mResponse;
-  // middleware
   std::vector<RouterGroup*> mGroups;
   uint32_t mGroupIndex;
   bool mIsAborted;

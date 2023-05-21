@@ -80,12 +80,9 @@ class Router {
 public:
   Router() = default;
 
-  struct Handler {
-    std::reference_wrapper<HandlerType> handle;
-    std::unique_ptr<ParamsType> params {nullptr};
-  };
+  using HandlerRef = std::reference_wrapper<HandlerType>;
 
-  auto handle(HttpRequest const& request) -> std::optional<Handler>
+  auto handle(HttpRequest const& request, ParamsType& params) -> std::optional<HandlerRef>
   {
     size_t i = 0;
     for (; i < request.path.size(); ++i) {
@@ -93,18 +90,19 @@ public:
         break;
       }
     }
-    return getHandler(request.method, request.path.substr(0, i));
+    auto view = request.path.substr(0, i);
+    return getHandler(request.method, view, params);
   }
-  auto getHandler(HttpMethod method, std::string_view path) -> std::optional<Handler>
+  auto getHandler(HttpMethod method, std::string_view path, ParamsType& params) -> std::optional<HandlerRef>
   {
-    auto [node, params] = getRoute(method, path);
+    auto node = getRoute(method, path, params);
     if (node == nullptr) {
       return std::nullopt;
     }
     auto key = std::string(ToString(method)) + "-" + node->pattern;
     auto it = mHandles.find(key);
     if (it != mHandles.end()) {
-      return {Handler {it->second, std::move(params)}};
+      return {it->second};
     }
     return std::nullopt;
   }
@@ -127,30 +125,28 @@ public:
     mRoots[method].insert(pattern, parts, 0);
     mHandles[key] = std::move(handle);
   }
-  auto getRoute(HttpMethod method, std::string_view path)
-      -> std::pair<Node*, std::unique_ptr<std::map<std::string, std::string>>>
+  auto getRoute(HttpMethod method, std::string_view path, ParamsType& params) -> Node*
   {
     if (!mRoots.contains(method)) {
-      return {nullptr, nullptr};
+      return nullptr;
     }
     auto searchParts = ParsePattern(path);
-    auto params = std::make_unique<std::map<std::string, std::string>>();
     auto n = mRoots[method].search(searchParts, 0);
     if (n != nullptr) {
       auto parts = ParsePattern(n->pattern);
       for (size_t i = 0; i < parts.size(); i++) {
         auto part = parts[i];
         if (part[0] == ':') {
-          (*params)[part.substr(1)] = searchParts[i];
+          (params)[part.substr(1)] = searchParts[i];
         }
         if (part[0] == '*' && part.size() > 1) {
-          (*params)[part.substr(1)] = utils::StringJoin(std::span(searchParts).subspan(i), "/");
+          (params)[part.substr(1)] = utils::StringJoin(std::span(searchParts).subspan(i), "/");
           break;
         }
       }
-      return {n, std::move(params)};
+      return n;
     }
-    return {nullptr, nullptr};
+    return nullptr;
   }
 
 private:
@@ -243,7 +239,10 @@ public:
   {
     return addRoute(HttpMethod::Get, comp, std::move(handle));
   }
-  auto handle(HttpRequest const& request) -> std::optional<Router::Handler> { return mRouter.handle(request); }
+  auto handle(HttpRequest const& request, ParamsType& params) -> std::optional<Router::HandlerRef>
+  {
+    return mRouter.handle(request, params);
+  }
 
 private:
   Router mRouter;

@@ -28,19 +28,20 @@ public:
               if (!request) {
                 co_return;
               }
-              utils::println("request: {}", request->get()->path);
-              auto result = mRouters.handle(**request); // get handler from request
+              auto params = ParamsType {};
+              auto result = mRouters.handle(**request, params); // get handler from request
               if (!result) {
                 co_return;
               } else {
-                auto ctx = Context {
-                    mReactor, mExecutor, s, std::move(result.value().params), {},
-                };
-                if (!ParseQueries(request->get()->path, ctx.mQueries)) {
+                auto queries = QueriesType {};
+                if (!ParseQueries(request->get()->path, queries)) {
                   co_return;
                 };
+                auto ctx = Context {
+                    mReactor, mExecutor, s, params, queries,
+                };
                 ctx.initGroups(this->mRouters, request->get()->path);
-                auto task = (result.value().handle)(ctx);
+                auto task = (result.value())(ctx);
                 try {
                   auto response = co_await std::move(task);
                   if (!response) {

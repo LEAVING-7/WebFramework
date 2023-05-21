@@ -68,10 +68,10 @@ auto Context::initGroups(Routers& routers, std::string_view path) -> void
             [](auto&& a, auto&& b) { return a->getPrefix().size() < b->getPrefix().size(); });
   assert(mGroups.front()->getPrefix() == "");
 }
-Context::Context(async::Reactor& r, async::MultiThreadExecutor& e, async::TcpStream& s, std::unique_ptr<ParamsType> p,
-                 QueriesType&& queries)
-    : mReactor(r), mExecutor(e), mStream(s), mParams(std::move(p)), mQueries(std::move(queries)), mResponse(),
-      mGroups(), mGroupIndex(0), mIsAborted(false)
+Context::Context(async::Reactor& r, async::MultiThreadExecutor& e, async::TcpStream& s, ParamsType& p,
+                 QueriesType& queries)
+    : mQueries(queries), mParams(p), mReactor(r), mExecutor(e), mStream(s), mResponse(), mGroups(), mGroupIndex(0),
+      mIsAborted(false)
 {
 }
 } // namespace wf
