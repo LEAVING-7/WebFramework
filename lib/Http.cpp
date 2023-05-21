@@ -149,7 +149,7 @@ auto ToString(HttpStatus status) -> std::string_view
   // clang-format on
 }
 
-auto RecvHttpRequest(async::TcpStream& stream, std::span<char> buffer) -> Task<StdResult<std::unique_ptr<HttpRequest>>>
+auto RecvHttpRequest(async::TcpStream& stream, std::span<char> buffer) -> async::Task<StdResult<std::unique_ptr<HttpRequest>>>
 {
   char const *method, *path;
   int pret, minorVersion;
@@ -191,7 +191,7 @@ auto RecvHttpRequest(async::TcpStream& stream, std::span<char> buffer) -> Task<S
   req->body = std::string(buffer.data() + pret, bufLen - pret);
   co_return req;
 }
-auto RecvHttpResponse(async::TcpStream& stream, std::span<char> buf) -> Task<StdResult<std::unique_ptr<HttpResponse>>>
+auto RecvHttpResponse(async::TcpStream& stream, std::span<char> buf) -> async::Task<StdResult<std::unique_ptr<HttpResponse>>>
 {
   int pret, minorVersion, status;
   struct phr_header headers[100];
@@ -232,18 +232,18 @@ auto RecvHttpResponse(async::TcpStream& stream, std::span<char> buf) -> Task<Std
   co_return res;
 }
 
-auto RecvHttpRequest(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpRequest>>>
+auto RecvHttpRequest(async::TcpStream& stream) -> async::Task<StdResult<std::unique_ptr<HttpRequest>>>
 {
   auto buf = std::array<char, 4096>();
   co_return co_await RecvHttpRequest(stream, buf);
 }
-auto RecvHttpResponse(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpResponse>>>
+auto RecvHttpResponse(async::TcpStream& stream) -> async::Task<StdResult<std::unique_ptr<HttpResponse>>>
 {
   auto buf = std::array<char, 4096>();
   co_return co_await RecvHttpResponse(stream, buf);
 }
 
-auto SendHttpRequest(async::TcpStream& stream, HttpRequest const& req) -> Task<StdResult<void>>
+auto SendHttpRequest(async::TcpStream& stream, HttpRequest const& req) -> async::Task<StdResult<void>>
 {
   auto const buf = ToString(req);
   auto sent = size_t(0);
@@ -256,7 +256,7 @@ auto SendHttpRequest(async::TcpStream& stream, HttpRequest const& req) -> Task<S
   }
   co_return {};
 }
-auto SendHttpResponse(async::TcpStream& stream, HttpResponse const& res) -> Task<StdResult<void>>
+auto SendHttpResponse(async::TcpStream& stream, HttpResponse const& res) -> async::Task<StdResult<void>>
 {
   auto const buf = ToString(res);
   auto sent = size_t(0);

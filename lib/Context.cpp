@@ -28,7 +28,7 @@ auto Context::text(std::string_view text) -> bool
   return true;
 }
 
-auto Context::runMiddleware() -> Task<bool>
+auto Context::runMiddleware() -> async::Task<bool>
 {
   if (mGroupIndex < mGroups.size()) {
     auto group = mGroups[mGroupIndex];
@@ -44,7 +44,7 @@ auto Context::runMiddleware() -> Task<bool>
   }
   co_return true;
 }
-auto Context::runAllMiddleware() -> Task<bool>
+auto Context::runAllMiddleware() -> async::Task<bool>
 {
   while (mGroupIndex < mGroups.size()) {
     auto res = co_await runMiddleware();
