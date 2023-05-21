@@ -1,10 +1,11 @@
 #include <WebFramework/Server.hpp>
+
 int main()
 {
   auto routers = wf::Routers {};
   auto root = routers.rootGroup()
                   ->use([](wf::Context& ctx) -> Task<bool> {
-                    printf("new connection at fd: %d\n", ctx.stream().getSocket().raw());
+                    wf::utils::println("get request {}", ToString(ctx.mRequest));
                     co_return true;
                   })
                   ->get("/index", [](wf::Context& ctx) -> Task<bool> {
@@ -46,6 +47,6 @@ int main()
                   ctx.text(std::format("Hello {}", ctx.getParam("username").value()));
                   co_return true;
                 });
-  auto server = wf::Server {std::move(routers)};
+  auto server = wf::Server {std::move(routers), {async::SocketAddrV4 {async::Ipv4Addr::Any, 80}}};
   server.run();
 }

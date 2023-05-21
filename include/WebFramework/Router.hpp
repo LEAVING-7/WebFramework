@@ -195,7 +195,15 @@ public:
   }
   auto post(std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
-    return addRoute(HttpMethod::Get, comp, std::move(handle));
+    return addRoute(HttpMethod::Post, comp, std::move(handle));
+  }
+  auto put(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  {
+    return addRoute(HttpMethod::Put, comp, std::move(handle));
+  }
+  auto delete_(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  {
+    return addRoute(HttpMethod::Delete, comp, std::move(handle));
   }
 
 private:
@@ -237,7 +245,15 @@ public:
   }
   auto post(std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
-    return addRoute(HttpMethod::Get, comp, std::move(handle));
+    return addRoute(HttpMethod::Post, comp, std::move(handle));
+  }
+  auto put(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  {
+    return addRoute(HttpMethod::Put, comp, std::move(handle));
+  }
+  auto delete_(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  {
+    return addRoute(HttpMethod::Delete, comp, std::move(handle));
   }
   auto handle(HttpRequest const& request, ParamsType& params) -> std::optional<Router::HandlerRef>
   {

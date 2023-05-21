@@ -7,13 +7,11 @@ namespace wf {
 
 class Server {
 public:
-  Server(Routers&& router) : mRouters(std::move(router)) {};
+  Server(Routers&& router, async::SocketAddr addr) : mRouters(std::move(router)), mAddr(addr) {};
 
   auto run() -> StdResult<void>
   {
-    using async::SocketAddr;
-    using async::SocketAddrV4;
-    auto listener = async::TcpListener::Bind(mReactor, SocketAddr(SocketAddrV4 {{0, 0, 0, 0}, 80}));
+    auto listener = async::TcpListener::Bind(mReactor, mAddr);
     if (!listener) {
       return make_unexpected(listener.error());
     } else {
@@ -28,18 +26,19 @@ public:
               if (!request) {
                 co_return;
               }
-              auto params = ParamsType {};
-              auto result = mRouters.handle(**request, params); // get handler from request
+              auto ctx = Context {
+                  mReactor,
+                  mExecutor,
+                  s,
+                  **request,
+              };
+              if (!ParseQueries(request->get()->path, ctx.mQueries)) {
+                co_return;
+              };
+              auto result = mRouters.handle(**request, ctx.mParams); // get handler from request
               if (!result) {
                 co_return;
               } else {
-                auto queries = QueriesType {};
-                if (!ParseQueries(request->get()->path, queries)) {
-                  co_return;
-                };
-                auto ctx = Context {
-                    mReactor, mExecutor, s, params, queries,
-                };
                 ctx.initGroups(this->mRouters, request->get()->path);
                 auto task = (result.value())(ctx);
                 try {
@@ -69,6 +68,7 @@ public:
 
 private:
   Routers mRouters;
+  async::SocketAddr mAddr;
   async::MultiThreadExecutor mExecutor {4};
   async::Reactor mReactor {};
 };

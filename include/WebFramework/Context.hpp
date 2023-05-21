@@ -6,8 +6,7 @@ namespace wf {
 class Context {
 public:
   friend class Server;
-  Context(async::Reactor& r, async::MultiThreadExecutor& e, async::TcpStream& s, ParamsType& p,
-          QueriesType& queries);
+  Context(async::Reactor& r, async::MultiThreadExecutor& e, async::TcpStream& s, HttpRequest& request);
   auto json(json11::Json const& json) -> bool;
   auto html(std::string_view html) -> bool;
   auto text(std::string_view text) -> bool;
@@ -37,8 +36,9 @@ public:
   auto runMiddleware() -> Task<bool>;
   auto runAllMiddleware() -> Task<bool>;
 
-  QueriesType& mQueries;
-  ParamsType& mParams;
+  HttpRequest& mRequest;
+  QueriesType mQueries;
+  ParamsType mParams;
 private:
   async::Reactor& mReactor;
   async::MultiThreadExecutor& mExecutor;
