@@ -3,34 +3,19 @@
 #include "Http.hpp"
 #include "utils.hpp"
 namespace wf {
-struct Context;
+class Context;
 class RouterGroup;
 class Routers;
 
+using QueriesType = std::map<std::string, std::string>;
 using ParamsType = std::map<std::string, std::string>;
 using ResponseType = Task<bool>;
 using HandlerFnType = ResponseType(Context&);
 using HandlerType = std::function<HandlerFnType>;
 
-struct Context {
-  friend class Server;
-  async::Reactor& reactor;
-  async::MultiThreadExecutor& executor;
-  async::TcpStream& stream;
-  std::unique_ptr<ParamsType> params;
-  HttpResponse response;
-  // middleware
-  std::vector<RouterGroup*> groups;
-  uint32_t groupIndex;
-  bool isAborted;
+// parse url queries
+auto ParseQueries(std::string_view str, QueriesType& queries) -> bool;
 
-
-  auto runMiddleware() -> Task<bool>;
-  auto runAllMiddleware() -> Task<bool>;
-
-private:
-  auto initGroups(Routers& routers, std::string_view path) -> void;
-};
 class Router {
   struct Node {
     std::string pattern; // e.g. /p/:name
@@ -99,7 +84,17 @@ public:
     std::reference_wrapper<HandlerType> handle;
     std::unique_ptr<ParamsType> params {nullptr};
   };
-  auto handle(HttpRequest const& request) -> std::optional<Handler> { return getHandler(request.method, request.path); }
+
+  auto handle(HttpRequest const& request) -> std::optional<Handler>
+  {
+    size_t i = 0;
+    for (; i < request.path.size(); ++i) {
+      if (request.path[i] == '?') {
+        break;
+      }
+    }
+    return getHandler(request.method, request.path.substr(0, i));
+  }
   auto getHandler(HttpMethod method, std::string_view path) -> std::optional<Handler>
   {
     auto [node, params] = getRoute(method, path);
@@ -113,11 +108,11 @@ public:
     }
     return std::nullopt;
   }
-  auto GET(std::string_view patten, HandlerType&& handle) -> void
+  auto get(std::string_view patten, HandlerType&& handle) -> void
   {
     addRoute(HttpMethod::Get, patten, std::move(handle));
   }
-  auto POST(std::string_view patten, HandlerType&& handle) -> void
+  auto post(std::string_view patten, HandlerType&& handle) -> void
   {
     addRoute(HttpMethod::Post, patten, std::move(handle));
   }
@@ -198,11 +193,11 @@ public:
   auto getMiddleware() const -> std::span<HandlerType const> { return mMiddlewareHandles; }
   auto getParent() const -> RouterGroup* { return mParent; }
   auto addRoute(HttpMethod method, std::string_view comp, HandlerType&& handle) -> RouterGroup*;
-  auto GET(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  auto get(std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
     return addRoute(HttpMethod::Get, comp, std::move(handle));
   }
-  auto POST(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  auto post(std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
     return addRoute(HttpMethod::Get, comp, std::move(handle));
   }
@@ -240,11 +235,11 @@ public:
     mRouter.addRoute(method, comp, std::move(handle));
     return mRootGroup;
   }
-  auto GET(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  auto get(std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
     return addRoute(HttpMethod::Get, comp, std::move(handle));
   }
-  auto POST(std::string_view comp, HandlerType&& handle) -> RouterGroup*
+  auto post(std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
     return addRoute(HttpMethod::Get, comp, std::move(handle));
   }
@@ -255,44 +250,5 @@ private:
   RouterGroup* mRootGroup {nullptr};
   std::vector<std::unique_ptr<RouterGroup>> mGroups;
 };
-inline auto Context::runMiddleware() -> Task<bool>
-{
-  if (groupIndex < groups.size()) {
-    auto group = groups[groupIndex];
-    groupIndex++;
-    auto handles = group->getMiddleware();
-    for (auto&& handle : handles) {
-      auto res = co_await handle(*this);
-      if (!res) {
-        co_return false;
-      }
-    }
-    co_return true;
-  }
-  co_return true;
-}
-inline auto Context::runAllMiddleware() -> Task<bool>
-{
-  while (groupIndex < groups.size()) {
-    auto res = co_await runMiddleware();
-    if (!res) {
-      co_return false;
-    }
-  }
-  co_return true;
-}
-inline auto Context::initGroups(Routers& routers, std::string_view path) -> void
-{
-  auto& rtGroups = routers.getGroups();
-  groups = std::vector<RouterGroup*> {};
-  for (auto&& group : rtGroups) {
-    auto prefix = group->getPrefix();
-    if (path.starts_with(prefix)) {
-      groups.push_back(group.get());
-    }
-  }
-  std::sort(groups.begin(), groups.end(),
-            [](auto&& a, auto&& b) { return a->getPrefix().size() < b->getPrefix().size(); });
-  assert(groups.front()->getPrefix() == "");
-}
+
 }; // namespace wf

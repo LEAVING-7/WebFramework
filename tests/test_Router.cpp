@@ -2,10 +2,10 @@
 
 #include <WebFramework/Http.hpp>
 #include <WebFramework/Router.hpp>
-class RouterTest : public ::testing::Test {
+class RouterTestFixture : public ::testing::Test {
 protected:
   wf::Router router;
-  RouterTest()
+  RouterTestFixture()
   {
     router.addRoute(wf::HttpMethod::Get, "/", nullptr);
     router.addRoute(wf::HttpMethod::Get, "/hello/:name", nullptr);
@@ -13,10 +13,10 @@ protected:
     router.addRoute(wf::HttpMethod::Get, "/hi/:name", nullptr);
     router.addRoute(wf::HttpMethod::Get, "/assets/*filepath", nullptr);
   }
-  ~RouterTest() override {}
+  ~RouterTestFixture() override {}
 };
 
-TEST_F(RouterTest, GetRouter)
+TEST_F(RouterTestFixture, GetRouter)
 {
   {
     auto [node, params] = router.getRoute(wf::HttpMethod::Get, "/hello/foobar");
@@ -54,61 +54,11 @@ TEST_F(RouterTest, GetRouter)
   }
 }
 
-class RoutersTest : public ::testing::Test {
-protected:
-  RoutersTest()
-  {
-    auto root = routers.rootGroup()->GET("/index", [](wf::Context& ctx) -> Task<bool> {
-      ctx.response.status = wf::HttpStatus::Ok;
-      ctx.response.version = wf::HttpVersion::Http11;
-      ctx.response.reason = "OK";
-      ctx.response.body = std::format("Hello");
-      co_return true;
-    });
-    auto v1 = root->newGroup("/v1")
-                  ->GET("/",
-                        [](wf::Context& ctx) -> Task<bool> {
-                          ctx.response.status = wf::HttpStatus::Ok;
-                          ctx.response.version = wf::HttpVersion::Http11;
-                          ctx.response.reason = "OK";
-                          ctx.response.body = std::format("/v1/");
-                          co_return true;
-                        })
-                  ->GET("/hello", [](wf::Context& ctx) -> Task<bool> {
-                    auto response = std::make_unique<wf::HttpResponse>();
-                    response->status = wf::HttpStatus::Ok;
-                    response->version = wf::HttpVersion::Http11;
-                    response->reason = "OK";
-                    response->body = std::format("/v1/hello");
-                    co_return true;
-                  });
-    auto v2 = root->newGroup("/v2")
-                  ->GET("/hello/:name",
-                        [](wf::Context& ctx) -> Task<bool> {
-                          ctx.response.status = wf::HttpStatus::Ok;
-                          ctx.response.version = wf::HttpVersion::Http11;
-                          ctx.response.reason = "OK";
-                          ctx.response.body = std::format("/v2/hello/{}", ctx.params->at("name"));
-                          co_return true;
-                        })
-                  ->POST("/login/*username", [](wf::Context& ctx) -> Task<bool> {
-                    ctx.response.status = wf::HttpStatus::Ok;
-                    ctx.response.version = wf::HttpVersion::Http11;
-                    ctx.response.reason = "OK";
-                    ctx.response.body = std::format("login");
-                    co_return true;
-                  });
-  }
-  ~RoutersTest() override {}
-  wf::RouterGroup* v1;
-  wf::RouterGroup* v2;
-  wf::Routers routers;
-};
-
-TEST_F(RoutersTest, RouterGroup)
+TEST(RouterTest, ParseQueries)
 {
-  // auto ptr = v1->getParent();
-  // while (ptr != nullptr) {
-  //   ptr = ptr->getParent();
-  // }
+  auto map = std::map<std::string, std::string> {};
+  wf::ParseQueries("/hello?name=foobar&", map);
+  ASSERT_EQ(map.size(), 2);
+  ASSERT_EQ(map["name"], "foobar");
+  ASSERT_EQ(map["age"], "20");
 }

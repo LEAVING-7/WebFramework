@@ -18,4 +18,23 @@ auto Routers::addGroup(std::unique_ptr<RouterGroup> group) -> RouterGroup*
   this->mGroups.emplace_back(std::move(group));
   return this->mGroups.back().get();
 }
+auto ParseQueries(std::string_view str, QueriesType& queries) -> bool
+{
+  if (str.empty()) {
+    return true;
+  }
+  auto pos = str.find('?');
+  if (pos == std::string_view::npos) {
+    return true;
+  }
+  str = str.substr(pos + 1);
+  auto parts = utils::StringSplit(str, '&');
+  for (auto& part : parts) {
+    auto kv = utils::StringSplit(part, '=');
+    if (kv.size() == 2) {
+      queries[kv[0]] = kv[1];
+    }
+  }
+  return true;
+}
 } // namespace wf

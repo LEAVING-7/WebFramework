@@ -1,6 +1,7 @@
 #pragma once
 #include <Async/TcpListener.hpp>
 
+#include "Context.hpp"
 #include "Router.hpp"
 namespace wf {
 
@@ -27,19 +28,16 @@ public:
               if (!request) {
                 co_return;
               }
+              utils::println("request: {}", request->get()->path);
               auto result = mRouters.handle(**request); // get handler from request
               if (!result) {
                 co_return;
               } else {
                 auto ctx = Context {
-                    .reactor = mReactor,
-                    .executor = mExecutor,
-                    .stream = s,
-                    .params = std::move(result.value().params),
-                    .response = {},
-                    .groups = {},
-                    .groupIndex = 0,
-                    .isAborted = false,
+                    mReactor, mExecutor, s, std::move(result.value().params), {},
+                };
+                if (!ParseQueries(request->get()->path, ctx.mQueries)) {
+                  co_return;
                 };
                 ctx.initGroups(this->mRouters, request->get()->path);
                 auto task = (result.value().handle)(ctx);
@@ -48,7 +46,7 @@ public:
                   if (!response) {
                     co_return;
                   }
-                  auto result = co_await wf::SendHttpResponse(s, ctx.response);
+                  auto result = co_await wf::SendHttpResponse(s, ctx.mResponse);
                   if (!result) {
                     co_return;
                   }

@@ -4,17 +4,12 @@ int main()
   auto routers = wf::Routers {};
   auto root = routers.rootGroup()
                   ->use([](wf::Context& ctx) -> Task<bool> {
-                    printf("new connection at fd: %d\n", ctx.stream.getSocket().raw());
+                    printf("new connection at fd: %d\n", ctx.stream().getSocket().raw());
                     co_return true;
                   })
-                  ->GET("/index", [](wf::Context& ctx) -> Task<bool> {
-                    wf::utils::println("before run middleware, ctx address: {}, groupIndex: {}, group size: {}",
-                                       (void*)&ctx, ctx.groupIndex, ctx.groups.size());
+                  ->get("/index", [](wf::Context& ctx) -> Task<bool> {
                     co_await ctx.runAllMiddleware();
-                    ctx.response.status = wf::HttpStatus::Ok;
-                    ctx.response.version = wf::HttpVersion::Http11;
-                    ctx.response.reason = "OK";
-                    ctx.response.body = std::format("Hello");
+                    ctx.html("<h1>Hello</h1>");
                     co_return true;
                   });
   auto v1 = root->newGroup("/v1")
@@ -22,22 +17,17 @@ int main()
                   wf::utils::println("v1 middleware");
                   co_return true;
                 })
-                ->GET("/",
+                ->get("/",
                       [](wf::Context& ctx) -> Task<bool> {
                         co_await ctx.runAllMiddleware();
-                        ctx.response.status = wf::HttpStatus::Ok;
-                        ctx.response.version = wf::HttpVersion::Http11;
-                        ctx.response.reason = "OK";
-                        ctx.response.body = std::format("/v1/");
+                        ctx.html("<h1>Hello world</h1>");
                         co_return true;
                       })
-                ->GET("/hello", [](wf::Context& ctx) -> Task<bool> {
+                ->get("/hello", [](wf::Context& ctx) -> Task<bool> {
                   co_await ctx.runAllMiddleware();
-                  ctx.response.status = wf::HttpStatus::Ok;
-                  ctx.response.version = wf::HttpVersion::Http11;
-                  ctx.response.reason = "OK";
-                  ctx.response.body = std::format("/v1/hello");
-                  throw std::runtime_error("test");
+                  wf::utils::println("Queries size:{}", ctx.mQueries.size());
+                  auto name = ctx.getQuery("name");
+                  ctx.text(std::format("Hello {}", name.value()));
                   co_return true;
                 });
   auto v2 = root->newGroup("/v2")
@@ -45,21 +35,15 @@ int main()
                   wf::utils::println("v2 middleware");
                   co_return true;
                 })
-                ->GET("/hello/:name",
+                ->get("/hello/:name",
                       [](wf::Context& ctx) -> Task<bool> {
                         co_await ctx.runAllMiddleware();
-                        ctx.response.status = wf::HttpStatus::Ok;
-                        ctx.response.version = wf::HttpVersion::Http11;
-                        ctx.response.reason = "OK";
-                        ctx.response.body = std::format("/v2/hello/{}", ctx.params->at("name"));
+                        ctx.text(std::format("Hello {}", ctx.getParam("name").value()));
                         co_return true;
                       })
-                ->POST("/login/*username", [](wf::Context& ctx) -> Task<bool> {
+                ->post("/login/*username", [](wf::Context& ctx) -> Task<bool> {
                   co_await ctx.runAllMiddleware();
-                  ctx.response.status = wf::HttpStatus::Ok;
-                  ctx.response.version = wf::HttpVersion::Http11;
-                  ctx.response.reason = "OK";
-                  ctx.response.body = std::format("login");
+                  ctx.text(std::format("Hello {}", ctx.getParam("username").value()));
                   co_return true;
                 });
   auto server = wf::Server {std::move(routers)};

@@ -2,6 +2,16 @@
 #include <cassert>
 #include <format>
 namespace wf {
+auto HttpResponse::set(HttpStatus status) -> void
+{
+  this->version = HttpVersion::Http11;
+  this->status = status;
+  this->reason = ToString(this->status);
+}
+auto HttpResponse::set(std::underlying_type_t<HttpStatus> status) -> void
+{
+  return set(static_cast<HttpStatus>(status));
+}
 auto static ParseHttpMethod(std::string_view method) -> HttpMethod
 {
   if (method == "GET") {

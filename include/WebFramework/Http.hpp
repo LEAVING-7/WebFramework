@@ -111,6 +111,9 @@ struct HttpResponse {
   std::string reason;
   std::unordered_map<std::string, std::string> headers;
   std::string body;
+
+  auto set(std::underlying_type_t<HttpStatus> status) -> void;
+  auto set(HttpStatus status) -> void;
 };
 auto ToString(HttpResponse const& res) -> std::string;
 
