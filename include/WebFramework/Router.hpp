@@ -9,7 +9,7 @@ class Routers;
 
 using QueriesType = std::map<std::string, std::string>;
 using ParamsType = std::map<std::string, std::string>;
-using ResponseType = Task<bool>;
+using ResponseType = async::Task<bool>;
 using HandlerFnType = ResponseType(Context&);
 using HandlerType = std::function<HandlerFnType>;
 

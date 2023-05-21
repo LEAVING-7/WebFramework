@@ -10,7 +10,7 @@ int main(int argc, char** argv)
   }
   auto content = std::string_view(argv[1]);
   auto routers = wf::Routers {};
-  routers.rootGroup()->get("/.well-known/acme-challenge/:key", [&content](wf::Context& ctx) -> Task<bool> {
+  routers.rootGroup()->get("/.well-known/acme-challenge/:key", [&content](wf::Context& ctx) -> async::Task<bool> {
     ctx.text(content);
     co_return true;
   });

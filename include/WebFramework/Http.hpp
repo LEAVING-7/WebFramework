@@ -117,14 +117,15 @@ struct HttpResponse {
 };
 auto ToString(HttpResponse const& res) -> std::string;
 
-auto RecvHttpRequest(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpRequest>>>;
-auto RecvHttpResponse(async::TcpStream& stream) -> Task<StdResult<std::unique_ptr<HttpResponse>>>;
+auto RecvHttpRequest(async::TcpStream& stream) -> async::Task<StdResult<std::unique_ptr<HttpRequest>>>;
+auto RecvHttpResponse(async::TcpStream& stream) -> async::Task<StdResult<std::unique_ptr<HttpResponse>>>;
 
 auto RecvHttpResponse(async::TcpStream& stream, std::span<char> buffer)
-    -> Task<StdResult<std::unique_ptr<HttpResponse>>>;
-auto RecvHttpRequest(async::TcpStream& stream, std::span<char> buffer) -> Task<StdResult<std::unique_ptr<HttpRequest>>>;
+    -> async::Task<StdResult<std::unique_ptr<HttpResponse>>>;
+auto RecvHttpRequest(async::TcpStream& stream, std::span<char> buffer)
+    -> async::Task<StdResult<std::unique_ptr<HttpRequest>>>;
 
-auto SendHttpRequest(async::TcpStream& stream, HttpRequest const& req) -> Task<StdResult<void>>;
-auto SendHttpResponse(async::TcpStream& stream, HttpResponse const& res) -> Task<StdResult<void>>;
+auto SendHttpRequest(async::TcpStream& stream, HttpRequest const& req) -> async::Task<StdResult<void>>;
+auto SendHttpResponse(async::TcpStream& stream, HttpResponse const& res) -> async::Task<StdResult<void>>;
 
 } // namespace wf

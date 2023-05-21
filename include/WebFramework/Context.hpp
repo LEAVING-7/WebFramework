@@ -33,8 +33,8 @@ public:
   auto response() -> HttpResponse& { return mResponse; }
   auto isAborted() -> bool { return mIsAborted; }
 
-  auto runMiddleware() -> Task<bool>;
-  auto runAllMiddleware() -> Task<bool>;
+  auto runMiddleware() -> async::Task<bool>;
+  auto runAllMiddleware() -> async::Task<bool>;
 
   HttpRequest& mRequest;
   QueriesType mQueries;

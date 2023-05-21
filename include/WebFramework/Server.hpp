@@ -15,13 +15,13 @@ public:
     if (!listener) {
       return make_unexpected(listener.error());
     } else {
-      auto loop = [this](async::TcpListener l) -> Task<> {
+      auto loop = [this](async::TcpListener l) -> async::Task<> {
         while (true) {
           auto stream = co_await l.accept(nullptr);
           if (!stream) {
             co_return;
           } else {
-            auto spawn = [this](async::TcpStream s) -> Task<> {
+            auto spawn = [this](async::TcpStream s) -> async::Task<> {
               auto request = co_await wf::RecvHttpRequest(s);
               if (!request) {
                 co_return;
