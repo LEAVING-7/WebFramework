@@ -4,10 +4,33 @@
 #include "utils.hpp"
 namespace wf {
 struct Context;
-using ParamsType = std::map<std::string, std::string>;
-using HandleFnType = Task<std::unique_ptr<HttpResponse>>(Context&);
-using HandlerType = std::function<HandleFnType>;
+class RouterGroup;
+class Routers;
 
+using ParamsType = std::map<std::string, std::string>;
+using ResponseType = Task<bool>;
+using HandlerFnType = ResponseType(Context&);
+using HandlerType = std::function<HandlerFnType>;
+
+struct Context {
+  friend class Server;
+  async::Reactor& reactor;
+  async::MultiThreadExecutor& executor;
+  async::TcpStream& stream;
+  std::unique_ptr<ParamsType> params;
+  HttpResponse response;
+  // middleware
+  std::vector<RouterGroup*> groups;
+  uint32_t groupIndex;
+  bool isAborted;
+
+
+  auto runMiddleware() -> Task<bool>;
+  auto runAllMiddleware() -> Task<bool>;
+
+private:
+  auto initGroups(Routers& routers, std::string_view path) -> void;
+};
 class Router {
   struct Node {
     std::string pattern; // e.g. /p/:name
@@ -98,23 +121,10 @@ public:
   {
     addRoute(HttpMethod::Post, patten, std::move(handle));
   }
-  auto parsePattern(std::string_view pattern) -> std::vector<std::string>
-  {
-    auto split = utils::StringSplit(pattern, '/');
-    auto parts = std::vector<std::string>();
-    for (auto&& item : split) {
-      if (!item.empty()) {
-        parts.push_back(item);
-        if (item[0] == '*') {
-          break;
-        }
-      }
-    }
-    return parts;
-  }
+
   auto addRoute(HttpMethod method, std::string_view pattern, HandlerType&& handle) -> void
   {
-    auto parts = parsePattern(pattern);
+    auto parts = ParsePattern(pattern);
     auto key = std::string(ToString(method)) + "-" + std::string(pattern);
     if (!mRoots.contains(method)) {
       mRoots[method] = Node {{}, {}, {}, false};
@@ -128,11 +138,11 @@ public:
     if (!mRoots.contains(method)) {
       return {nullptr, nullptr};
     }
-    auto searchParts = parsePattern(path);
+    auto searchParts = ParsePattern(path);
     auto params = std::make_unique<std::map<std::string, std::string>>();
     auto n = mRoots[method].search(searchParts, 0);
     if (n != nullptr) {
-      auto parts = parsePattern(n->pattern);
+      auto parts = ParsePattern(n->pattern);
       for (size_t i = 0; i < parts.size(); i++) {
         auto part = parts[i];
         if (part[0] == ':') {
@@ -149,11 +159,26 @@ public:
   }
 
 private:
+  static auto ParsePattern(std::string_view pattern) -> std::vector<std::string>
+  {
+    auto split = utils::StringSplit(pattern, '/');
+    auto parts = std::vector<std::string>();
+    for (auto&& item : split) {
+      if (!item.empty()) {
+        parts.push_back(item);
+        if (item[0] == '*') {
+          break;
+        }
+      }
+    }
+    return parts;
+  }
+
+private:
   std::map<HttpMethod, Node> mRoots;
   std::map<std::string, HandlerType> mHandles;
 };
 
-class Routers;
 class RouterGroup {
 public:
   RouterGroup() : RouterGroup("", nullptr, nullptr) {};
@@ -164,6 +189,14 @@ public:
   ~RouterGroup() = default;
 
   auto newGroup(std::string_view prefix) -> RouterGroup*;
+  auto getPrefix() const -> std::string_view { return mPrefix; }
+  auto use(HandlerType&& handle) -> RouterGroup*
+  {
+    mMiddlewareHandles.push_back(std::move(handle));
+    return this;
+  }
+  auto getMiddleware() const -> std::span<HandlerType const> { return mMiddlewareHandles; }
+  auto getParent() const -> RouterGroup* { return mParent; }
   auto addRoute(HttpMethod method, std::string_view comp, HandlerType&& handle) -> RouterGroup*;
   auto GET(std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
@@ -187,22 +220,20 @@ public:
   Routers(Routers&&) = default;
   ~Routers() = default;
   auto addGroup(std::unique_ptr<RouterGroup> group) -> RouterGroup*;
+  auto getGroups() const -> std::vector<std::unique_ptr<RouterGroup>> const& { return mGroups; }
   auto getRouter() -> Router& { return mRouter; }
   auto rootGroup() -> RouterGroup*
   {
+    assert(mRootGroup == nullptr && "root group already exists");
     auto g = std::make_unique<RouterGroup>("", this, nullptr);
-    mRootGroup = g.get();
-    mGroups.emplace_back(std::move(g));
-    return mGroups.back().get();
+    return mGroups.emplace_back(std::move(g)).get();
   }
   auto newGroup(std::string_view prefix) -> RouterGroup*
   {
     assert(mRootGroup != nullptr);
     auto g = std::make_unique<RouterGroup>(prefix, this, mRootGroup);
-    mGroups.emplace_back(std::move(g));
-    return mGroups.back().get();
+    return mGroups.emplace_back(std::move(g)).get();
   }
-
   auto addRoute(HttpMethod method, std::string_view comp, HandlerType&& handle) -> RouterGroup*
   {
     assert(mRootGroup != nullptr);
@@ -217,7 +248,6 @@ public:
   {
     return addRoute(HttpMethod::Get, comp, std::move(handle));
   }
-
   auto handle(HttpRequest const& request) -> std::optional<Router::Handler> { return mRouter.handle(request); }
 
 private:
@@ -225,4 +255,44 @@ private:
   RouterGroup* mRootGroup {nullptr};
   std::vector<std::unique_ptr<RouterGroup>> mGroups;
 };
+inline auto Context::runMiddleware() -> Task<bool>
+{
+  if (groupIndex < groups.size()) {
+    auto group = groups[groupIndex];
+    groupIndex++;
+    auto handles = group->getMiddleware();
+    for (auto&& handle : handles) {
+      auto res = co_await handle(*this);
+      if (!res) {
+        co_return false;
+      }
+    }
+    co_return true;
+  }
+  co_return true;
+}
+inline auto Context::runAllMiddleware() -> Task<bool>
+{
+  while (groupIndex < groups.size()) {
+    auto res = co_await runMiddleware();
+    if (!res) {
+      co_return false;
+    }
+  }
+  co_return true;
+}
+inline auto Context::initGroups(Routers& routers, std::string_view path) -> void
+{
+  auto& rtGroups = routers.getGroups();
+  groups = std::vector<RouterGroup*> {};
+  for (auto&& group : rtGroups) {
+    auto prefix = group->getPrefix();
+    if (path.starts_with(prefix)) {
+      groups.push_back(group.get());
+    }
+  }
+  std::sort(groups.begin(), groups.end(),
+            [](auto&& a, auto&& b) { return a->getPrefix().size() < b->getPrefix().size(); });
+  assert(groups.front()->getPrefix() == "");
+}
 }; // namespace wf

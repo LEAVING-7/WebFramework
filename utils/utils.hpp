@@ -1,9 +1,23 @@
 #pragma once
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 namespace wf::utils {
+template <typename... Args>
+auto print(const std::string_view fmt, Args&&... args)
+{
+  auto fmtArgs = std::make_format_args(args...);
+  fputs(std::vformat(fmt, fmtArgs).c_str(), stdout);
+}
+template <typename... Args>
+auto println(const std::string_view fmt, Args&&... args)
+{
+  auto fmtArgs = std::make_format_args(args...);
+  fputs(std::vformat(fmt, fmtArgs).c_str(), stdout);
+  fputs("\n", stdout);
+}
 inline auto StringSplit(std::string_view str, char delim) -> std::vector<std::string>
 {
   auto elems = std::vector<std::string>();

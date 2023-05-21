@@ -3,12 +3,7 @@
 
 #include "Router.hpp"
 namespace wf {
-struct Context {
-  async::Reactor& reactor;
-  async::MultiThreadExecutor& executor;
-  async::TcpStream& stream;
-  std::unique_ptr<ParamsType> params;
-};
+
 class Server {
 public:
   Server(Routers&& router) : mRouters(std::move(router)) {};
@@ -32,19 +27,33 @@ public:
               if (!request) {
                 co_return;
               }
-              auto result = mRouters.handle(**request);
+              auto result = mRouters.handle(**request); // get handler from request
               if (!result) {
                 co_return;
               } else {
-                auto ctx = Context {mReactor, mExecutor, s, std::move(result.value().params)};
+                auto ctx = Context {
+                    .reactor = mReactor,
+                    .executor = mExecutor,
+                    .stream = s,
+                    .params = std::move(result.value().params),
+                    .response = {},
+                    .groups = {},
+                    .groupIndex = 0,
+                    .isAborted = false,
+                };
+                ctx.initGroups(this->mRouters, request->get()->path);
                 auto task = (result.value().handle)(ctx);
-                auto response = co_await std::move(task);
-                if (!response) {
-                  co_return;
-                }
-                auto result = co_await wf::SendHttpResponse(s, *response);
-                if (!result) {
-                  co_return;
+                try {
+                  auto response = co_await std::move(task);
+                  if (!response) {
+                    co_return;
+                  }
+                  auto result = co_await wf::SendHttpResponse(s, ctx.response);
+                  if (!result) {
+                    co_return;
+                  }
+                } catch (std::exception& e) {
+                  utils::println("exception: {}", e.what());
                 }
               }
               co_return;

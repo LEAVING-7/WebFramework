@@ -11,7 +11,7 @@ if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
 endif()
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
-  set(CMAKE_CXX_FLAGS "-lstdc++ -lm -Wall -fdiagnostics-color=always ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "-lstdc++ -g -lm -Wall -fdiagnostics-color=always ${CMAKE_CXX_FLAGS}")
 endif()
 
 include(FetchContent)
